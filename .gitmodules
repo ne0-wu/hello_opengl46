@@ -1,0 +1,9 @@
+[submodule "MyGL"]
+	path = MyGL
+	url = https://github.com/ne0-wu/MyGL
+[submodule "external/openmesh"]
+	path = external/openmesh
+	url = https://gitlab.vci.rwth-aachen.de:9000/OpenMesh/OpenMesh.git
+[submodule "external/eigen"]
+	path = external/eigen
+	url = https://gitlab.com/libeigen/eigen
