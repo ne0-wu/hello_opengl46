@@ -161,18 +161,7 @@ int main() {
     float delta_time = 0.0f;
     auto io = ImGui::GetIO();
 
-    while (!window.should_close()) {
-      // Per-frame time logic
-      float current_frame_time = static_cast<float>(glfwGetTime());
-      delta_time = current_frame_time - last_frame_time;
-      last_frame_time = current_frame_time;
-
-      // Process input
-      // ==================================================
-      window.poll_events();
-      window.process_input();
-      window.process_camera_input(camera, delta_time);
-
+    auto render_loop = [&]() -> std::optional<int> {
       // write the model matrix of camera in the view matrix
       glm::mat4 view = camera.get_view_matrix() * camera.get_model_matrix();
       auto [width, height] = window.get_framebuffer_size();
@@ -232,11 +221,7 @@ int main() {
         dijkstra_path_state = DijkstraPathState::DONE;
       }
 
-      // ImGUI
-      // ==================================================
-      ImGui_ImplOpenGL3_NewFrame();
-      ImGui_ImplGlfw_NewFrame();
-      ImGui::NewFrame();
+      // ImGui::NewFrame();
 
       ImGui::Begin("Menu");
 
@@ -254,8 +239,6 @@ int main() {
       if (flags.show_log_console)
         logger.draw();
 
-      // Render
-      // ==================================================
       glEnable(GL_MULTISAMPLE);
       glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -287,11 +270,36 @@ int main() {
         path_points.draw();
       }
 
-      // render imgui and swap buffers
-      ImGui::Render();
-      ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-      window.swap_buffers();
-    }
+      return std::nullopt;
+    };
+
+    window.main_loop(render_loop);
+
+    // while (!window.should_close()) {
+    //   // Per-frame time logic
+    //   float current_frame_time = static_cast<float>(glfwGetTime());
+    //   delta_time = current_frame_time - last_frame_time;
+    //   last_frame_time = current_frame_time;
+
+    //   // Process input
+    //   // ==================================================
+    //   window.poll_events();
+    //   window.process_input();
+    //   window.process_camera_input(camera, delta_time);
+
+    //   // ImGUI
+    //   // ==================================================
+    //   ImGui_ImplOpenGL3_NewFrame();
+    //   ImGui_ImplGlfw_NewFrame();
+
+    //   // Render
+    //   // ==================================================
+
+    //   // render imgui and swap buffers
+    //   ImGui::Render();
+    //   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    //   window.swap_buffers();
+    // }
 
     return 0;
   } catch (const std::exception &e) {
