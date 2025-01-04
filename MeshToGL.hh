@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Mesh.h"
-#include "MyGL/Mesh.h"
+#include "Mesh.hh"
+#include "MyGL/Mesh.hh"
 
 glm::vec3 to_glm(const Eigen::Vector3d &v)
 {

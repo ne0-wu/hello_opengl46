@@ -19,14 +19,14 @@ add_subdirectory(MyGL)
 
 # Project
 set(HEADERS
-    Mesh.h
-    Dijkstra.h
-    MeshToGL.h
+    Mesh.hh
+    Dijkstra.hh
+    MeshToGL.hh
 )
 
 set(SOURCES
-    main.cpp
-    Dijkstra.cpp
+    main.cc
+    Dijkstra.cc
 )
 
 add_executable(${PROJECT_NAME}

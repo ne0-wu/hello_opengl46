@@ -2,7 +2,7 @@
 
 #include <functional>
 
-#include "Mesh.h"
+#include "Mesh.hh"
 #include <OpenMesh/Core/Utils/PropertyManager.hh>
 
 class Dijkstra

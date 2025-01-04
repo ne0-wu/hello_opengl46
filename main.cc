@@ -2,18 +2,18 @@
 
 #include <OpenMesh/Core/IO/MeshIO.hh>
 
-#include "Mesh.h"
+#include "Mesh.hh"
 
-#include "Dijkstra.h"
+#include "Dijkstra.hh"
 
-#include "MeshToGL.h"
+#include "MeshToGL.hh"
 
-#include "MyGL/LogConsole.h"
-#include "MyGL/Mesh.h"
-#include "MyGL/PickVertex.h"
-#include "MyGL/Shader.h"
-#include "MyGL/Utils.h"
-#include "MyGL/Window.h"
+#include "MyGL/LogConsole.hh"
+#include "MyGL/Mesh.hh"
+#include "MyGL/PickVertex.hh"
+#include "MyGL/Shader.hh"
+#include "MyGL/Utils.hh"
+#include "MyGL/Window.hh"
 
 struct Flags {
   enum class InteractionMode {
