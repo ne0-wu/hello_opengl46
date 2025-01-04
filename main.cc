@@ -1,11 +1,12 @@
-#include <OpenMesh/Core/IO/MeshIO.hh>
 #include <iostream>
+
+#include <OpenMesh/Core/IO/MeshIO.hh>
 
 #include "Dijkstra.hh"
 #include "Mesh.hh"
 #include "MeshToGL.hh"
+
 #include "MyGL/LogConsole.hh"
-#include "MyGL/Mesh.hh"
 #include "MyGL/PickVertex.hh"
 #include "MyGL/Shader.hh"
 #include "MyGL/ShaderManager.hh"
@@ -22,16 +23,16 @@ struct Flags {
   bool show_log_console = false;
 } flags;
 
-const char *InteractionModeItems[] = {"Default", "Select Vertex"};
+const char* InteractionModeItems[] = {"Default", "Select Vertex"};
 
 class StatusBar {
  public:
-  StatusBar(const std::string &text) : text(text) {}
+  StatusBar(const std::string& text) : text(text) {}
 
-  void set_text(const std::string &text) { this->text = text; }
+  void set_text(const std::string& text) { this->text = text; }
 
   void draw() {
-    ImGuiViewport *viewport = ImGui::GetMainViewport();
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(
         ImVec2(viewport->Pos.x, viewport->Pos.y + viewport->Size.y - 30));
     ImGui::SetNextWindowSize(ImVec2(viewport->Size.x, 30));
@@ -56,19 +57,21 @@ MyGL::LogConsole logger;
 
 class GeodesicPath {
  public:
-  GeodesicPath(const Mesh &mesh, Mesh::VertexHandle source,
+  GeodesicPath(const Mesh& mesh,
+               Mesh::VertexHandle source,
                Mesh::VertexHandle target)
       : mesh(mesh), source(source), target(target) {
     auto dijkstra = Dijkstra::compute(mesh, source, target);
-    if (!dijkstra.has_path(target)) throw std::runtime_error("No path found");
+    if (!dijkstra.has_path(target))
+      throw std::runtime_error("No path found");
 
     path = dijkstra.get_path(target);
   }
 
-  std::vector<Mesh::VertexHandle> &get_path() { return path; }
+  std::vector<Mesh::VertexHandle>& get_path() { return path; }
 
  private:
-  const Mesh &mesh;
+  const Mesh& mesh;
   Mesh::VertexHandle source, target;
 
   std::vector<Mesh::VertexHandle> path;
@@ -77,9 +80,10 @@ class GeodesicPath {
 // ==================================================
 
 // ImGUI IO for camera control
-void update_camera(MyGL::Camera &camera, float delta_time) {
+void update_camera(MyGL::Camera& camera, float delta_time) {
   auto io = ImGui::GetIO();
-  if (io.WantCaptureKeyboard) return;
+  if (io.WantCaptureKeyboard)
+    return;
   if (ImGui::IsKeyDown(ImGuiKey_W))
     camera.on_keyboard(MyGL::Camera::KeyboardMoveDirection::FORWARD,
                        delta_time);
@@ -95,7 +99,8 @@ void update_camera(MyGL::Camera &camera, float delta_time) {
   if (ImGui::IsKeyDown(ImGuiKey_J))
     camera.on_keyboard(MyGL::Camera::KeyboardMoveDirection::DOWN, delta_time);
 
-  if (io.WantCaptureMouse) return;
+  if (io.WantCaptureMouse)
+    return;
 
   auto [x, y] = ImGui::GetMousePos();
 }
@@ -106,7 +111,7 @@ int main() {
   // Initialize window (and OpenGL context)
   MyGL::Window window;
 
-  auto &shader_manager = MyGL::ShaderManager::get_instance();
+  auto& shader_manager = MyGL::ShaderManager::get_instance();
   shader_manager.add_shader(
       "phong",
       {{GL_VERTEX_SHADER, MyGL::read_file_to_string("data/shaders/phong.vert")},
@@ -139,8 +144,8 @@ int main() {
   Eigen::Vector3d max =
       Eigen::Vector3d::Constant(std::numeric_limits<double>::min());
 
-  for (const auto &v : mesh.vertices()) {
-    const auto &point = mesh.point(v);
+  for (const auto& v : mesh.vertices()) {
+    const auto& point = mesh.point(v);
     min = min.cwiseMin(point);
     max = max.cwiseMax(point);
   }
@@ -198,7 +203,7 @@ int main() {
     glm::mat4 projection =
         camera.get_projection_matrix(static_cast<float>(width) / height);
 
-    shader_manager.for_each_shader([&](MyGL::ShaderProgram &shader) {
+    shader_manager.for_each_shader([&](MyGL::ShaderProgram& shader) {
       shader.set_MVP({model, view, projection});
     });
 
@@ -237,7 +242,7 @@ int main() {
       try {
         GeodesicPath geodesic_path(mesh, source_vertex, target_vertex);
         path = geodesic_path.get_path();
-      } catch (const std::exception &e) {
+      } catch (const std::exception& e) {
         logger.log("Failed to compute shortest path: %s", e.what());
       }
       dijkstra_path_state = DijkstraPathState::UPLOAD_PATH;
@@ -247,7 +252,8 @@ int main() {
     // ==================================================
     if (dijkstra_path_state == DijkstraPathState::UPLOAD_PATH) {
       std::vector<glm::vec3> path_vertices;
-      for (const auto &v : path) path_vertices.push_back(to_glm(mesh.point(v)));
+      for (const auto& v : path)
+        path_vertices.push_back(to_glm(mesh.point(v)));
 
       path_points.update(path_vertices);
 
@@ -267,7 +273,8 @@ int main() {
 
     status_bar.draw();
 
-    if (flags.show_log_console) logger.draw();
+    if (flags.show_log_console)
+      logger.draw();
 
     glEnable(GL_MULTISAMPLE);
     glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
