@@ -80,230 +80,225 @@ private:
 
 // ==================================================
 
+// ImGUI IO for camera control
+void update_camera(MyGL::Camera &camera, float delta_time) {
+  auto io = ImGui::GetIO();
+  if (io.WantCaptureKeyboard)
+    return;
+  if (ImGui::IsKeyDown(ImGuiKey_W))
+    camera.on_keyboard(MyGL::Camera::KeyboardMoveDirection::FORWARD,
+                       delta_time);
+  if (ImGui::IsKeyDown(ImGuiKey_S))
+    camera.on_keyboard(MyGL::Camera::KeyboardMoveDirection::BACKWARD,
+                       delta_time);
+  if (ImGui::IsKeyDown(ImGuiKey_A))
+    camera.on_keyboard(MyGL::Camera::KeyboardMoveDirection::LEFT, delta_time);
+  if (ImGui::IsKeyDown(ImGuiKey_D))
+    camera.on_keyboard(MyGL::Camera::KeyboardMoveDirection::RIGHT, delta_time);
+  if (ImGui::IsKeyDown(ImGuiKey_K))
+    camera.on_keyboard(MyGL::Camera::KeyboardMoveDirection::UP, delta_time);
+  if (ImGui::IsKeyDown(ImGuiKey_J))
+    camera.on_keyboard(MyGL::Camera::KeyboardMoveDirection::DOWN, delta_time);
+
+  if (io.WantCaptureMouse)
+    return;
+
+  auto [x, y] = ImGui::GetMousePos();
+}
+
+// ==================================================
+
 int main() {
-  try {
-    // Initialize window (and OpenGL context)
-    MyGL::Window window;
+  // Initialize window (and OpenGL context)
+  MyGL::Window window;
 
-    // Shaders
-    MyGL::ShaderProgram basic_shader(
-        MyGL::read_file_to_string("data/shaders/basic.vert"),
-        MyGL::read_file_to_string("data/shaders/basic.frag"));
-    MyGL::ShaderProgram phong_shader(
-        MyGL::read_file_to_string("data/shaders/phong.vert"),
-        MyGL::read_file_to_string("data/shaders/phong.frag"));
+  // Shaders
+  MyGL::ShaderProgram basic_shader(
+      MyGL::read_file_to_string("data/shaders/basic.vert"),
+      MyGL::read_file_to_string("data/shaders/basic.frag"));
+  MyGL::ShaderProgram phong_shader(
+      MyGL::read_file_to_string("data/shaders/phong.vert"),
+      MyGL::read_file_to_string("data/shaders/phong.frag"));
 
-    MyGL::ShaderProgram round_point_shader(
-        MyGL::read_file_to_string("data/shaders/basic.vert"),
-        MyGL::read_file_to_string("data/shaders/round_point.frag"));
-    MyGL::PickVertex pick_vertex;
+  MyGL::ShaderProgram round_point_shader(
+      MyGL::read_file_to_string("data/shaders/basic.vert"),
+      MyGL::read_file_to_string("data/shaders/round_point.frag"));
+  MyGL::PickVertex pick_vertex;
 
-    // Load mesh from file
-    Mesh mesh;
-    if (!OpenMesh::IO::read_mesh(mesh, "data/models/stanford-bunny.obj"))
-      throw std::runtime_error("Failed to read mesh from file");
+  // Load mesh from file
+  Mesh mesh;
+  if (!OpenMesh::IO::read_mesh(mesh, "data/models/stanford-bunny.obj"))
+    throw std::runtime_error("Failed to read mesh from file");
 
-    // Move mesh to [-1, 1]^3
-    glm::mat4 model; // for convenience, we represent translation of models in
-                     // the model matrix
-    Eigen::Vector3d min =
-        Eigen::Vector3d::Constant(std::numeric_limits<double>::max());
-    Eigen::Vector3d max =
-        Eigen::Vector3d::Constant(std::numeric_limits<double>::min());
+  // Move mesh to [-1, 1]^3
+  glm::mat4 model; // for convenience, we represent translation of models in
+                   // the model matrix
+  Eigen::Vector3d min =
+      Eigen::Vector3d::Constant(std::numeric_limits<double>::max());
+  Eigen::Vector3d max =
+      Eigen::Vector3d::Constant(std::numeric_limits<double>::min());
 
-    for (const auto &v : mesh.vertices()) {
-      const auto &point = mesh.point(v);
-      min = min.cwiseMin(point);
-      max = max.cwiseMax(point);
+  for (const auto &v : mesh.vertices()) {
+    const auto &point = mesh.point(v);
+    min = min.cwiseMin(point);
+    max = max.cwiseMax(point);
+  }
+
+  Eigen::Vector3d center = (min + max) / 2.0;
+  const auto scale = 2.0 / (max - min).maxCoeff();
+  model = glm::scale(glm::mat4(1.0f), glm::vec3(scale)) *
+          glm::translate(glm::mat4(1.0f),
+                         glm::vec3(-center[0], -center[1], -center[2]));
+
+  // Compute normals (for Phong shading)
+  mesh.request_face_normals();
+  mesh.request_vertex_normals();
+  mesh.update_normals();
+
+  // Convert mesh to MyGL::Mesh
+  MeshToGL mesh2gl;
+  MyGL::Mesh gl_mesh(mesh2gl.vertices(mesh), mesh2gl.indices(mesh));
+
+  // Set up camera
+  // the camera looks at the origin and is positioned at (0, 0, -2) in the
+  // beginning
+  MyGL::OrbitCamera camera({0.0f, 0.0f, 0.0f});
+  camera.set_position({0.0f, 0.0f, -2.0f});
+
+  Mesh::VertexHandle source_vertex, target_vertex;
+
+  enum class DijkstraPathState {
+    IDLE,
+    SELECT_SOURCE,
+    SELECT_TARGET,
+    COMPUTE_PATH,
+    UPLOAD_PATH,
+    DONE
+  } dijkstra_path_state = DijkstraPathState::IDLE;
+
+  // Path
+  std::vector<Mesh::VertexHandle> path;
+  MyGL::PointCloud path_points;
+
+  // Render loop
+  // ==================================================
+  float last_frame_time = static_cast<float>(glfwGetTime());
+
+  auto render_loop = [&]() -> std::optional<int> {
+    float current_frame_time = static_cast<float>(glfwGetTime());
+    float delta_time = current_frame_time - last_frame_time;
+    last_frame_time = current_frame_time;
+
+    update_camera(camera, delta_time);
+
+    // write the model matrix of camera in the view matrix
+    glm::mat4 view = camera.get_view_matrix() * camera.get_model_matrix();
+    auto [width, height] = window.get_framebuffer_size();
+    glm::mat4 projection =
+        camera.get_projection_matrix(static_cast<float>(width) / height);
+
+    // Select vertex
+    // ==================================================
+    if (window.is_mouse_inside() && !ImGui::GetIO().WantCaptureMouse) {
+      ImVec2 mouse_pos = ImGui::GetMousePos();
+      auto [width, height] = MyGL::get_viewport_size();
+      pick_vertex.pick({mouse_pos.x, height - mouse_pos.y}, gl_mesh,
+                       {model, view, projection});
     }
 
-    Eigen::Vector3d center = (min + max) / 2.0;
-    const auto scale = 2.0 / (max - min).maxCoeff();
-    model = glm::scale(glm::mat4(1.0f), glm::vec3(scale)) *
-            glm::translate(glm::mat4(1.0f),
-                           glm::vec3(-center[0], -center[1], -center[2]));
+    auto hovered_vertex = Mesh::VertexHandle(pick_vertex.get_picked_vertex());
+    if (hovered_vertex.is_valid())
+      status_bar.set_text("Hovered vertex: " +
+                          std::to_string(hovered_vertex.idx()));
+    else
+      status_bar.set_text("No vertex hovered");
 
-    // Compute normals (for Phong shading)
-    mesh.request_face_normals();
-    mesh.request_vertex_normals();
-    mesh.update_normals();
+    if (ImGui::IsMouseClicked(0) && hovered_vertex.is_valid()) {
+      switch (dijkstra_path_state) {
+      case DijkstraPathState::SELECT_SOURCE:
+        source_vertex = hovered_vertex;
+        dijkstra_path_state = DijkstraPathState::SELECT_TARGET;
+        break;
+      case DijkstraPathState::SELECT_TARGET:
+        target_vertex = hovered_vertex;
+        dijkstra_path_state = DijkstraPathState::COMPUTE_PATH;
+        break;
+      }
+    }
 
-    // Convert mesh to MyGL::Mesh
-    MeshToGL mesh2gl;
-    MyGL::Mesh gl_mesh(mesh2gl.vertices(mesh), mesh2gl.indices(mesh));
-
-    // Set up camera
-    // the camera looks at the origin and is positioned at (0, 0, -2) in the
-    // beginning
-    MyGL::OrbitCamera camera({0.0f, 0.0f, 0.0f});
-    camera.set_position({0.0f, 0.0f, -2.0f});
-
-    Mesh::VertexHandle source_vertex, target_vertex;
-    // int geodesic_path_status = 0; // 0: select source, 1: select target, 2:
-    // run dijkstra
-
-    enum class DijkstraPathState {
-      IDLE,
-      SELECT_SOURCE,
-      SELECT_TARGET,
-      COMPUTE_PATH,
-      UPLOAD_PATH,
-      DONE
-    } dijkstra_path_state = DijkstraPathState::IDLE;
-
-    // Path
-    std::vector<Mesh::VertexHandle> path;
-    MyGL::PointCloud path_points;
-
-    // Render loop
+    // Compute geodesic path
     // ==================================================
-    float last_frame_time = 0.0f;
-    float delta_time = 0.0f;
-    auto io = ImGui::GetIO();
-
-    auto render_loop = [&]() -> std::optional<int> {
-      // write the model matrix of camera in the view matrix
-      glm::mat4 view = camera.get_view_matrix() * camera.get_model_matrix();
-      auto [width, height] = window.get_framebuffer_size();
-      glm::mat4 projection =
-          camera.get_projection_matrix(static_cast<float>(width) / height);
-
-      // Select vertex
-      // ==================================================
-      if (window.is_mouse_inside() && !ImGui::GetIO().WantCaptureMouse) {
-        ImVec2 mouse_pos = ImGui::GetMousePos();
-        auto [width, height] = MyGL::get_viewport_size();
-        pick_vertex.pick({mouse_pos.x, height - mouse_pos.y}, gl_mesh,
-                         {model, view, projection});
+    if (dijkstra_path_state == DijkstraPathState::COMPUTE_PATH) {
+      try {
+        GeodesicPath geodesic_path(mesh, source_vertex, target_vertex);
+        path = geodesic_path.get_path();
+      } catch (const std::exception &e) {
+        logger.log("Failed to compute shortest path: %s", e.what());
       }
+      dijkstra_path_state = DijkstraPathState::UPLOAD_PATH;
+    }
 
-      auto hovered_vertex = Mesh::VertexHandle(pick_vertex.get_picked_vertex());
-      if (hovered_vertex.is_valid())
-        status_bar.set_text("Hovered vertex: " +
-                            std::to_string(hovered_vertex.idx()));
-      else
-        status_bar.set_text("No vertex hovered");
+    // Upload path to GPU
+    // ==================================================
+    if (dijkstra_path_state == DijkstraPathState::UPLOAD_PATH) {
+      std::vector<glm::vec3> path_vertices;
+      for (const auto &v : path)
+        path_vertices.push_back(to_glm(mesh.point(v)));
 
-      if (ImGui::IsMouseClicked(0) && hovered_vertex.is_valid()) {
-        switch (dijkstra_path_state) {
-        case DijkstraPathState::SELECT_SOURCE:
-          source_vertex = hovered_vertex;
-          dijkstra_path_state = DijkstraPathState::SELECT_TARGET;
-          break;
-        case DijkstraPathState::SELECT_TARGET:
-          target_vertex = hovered_vertex;
-          dijkstra_path_state = DijkstraPathState::COMPUTE_PATH;
-          break;
-        }
-      }
+      path_points.update(path_vertices);
 
-      // Compute geodesic path
-      // ==================================================
-      if (dijkstra_path_state == DijkstraPathState::COMPUTE_PATH) {
-        try {
-          GeodesicPath geodesic_path(mesh, source_vertex, target_vertex);
-          path = geodesic_path.get_path();
-        } catch (const std::exception &e) {
-          logger.log("Failed to compute shortest path: %s", e.what());
-        }
-        dijkstra_path_state = DijkstraPathState::UPLOAD_PATH;
-      }
+      dijkstra_path_state = DijkstraPathState::DONE;
+    }
 
-      // Upload path to GPU
-      // ==================================================
-      if (dijkstra_path_state == DijkstraPathState::UPLOAD_PATH) {
-        std::vector<glm::vec3> path_vertices;
-        for (const auto &v : path)
-          path_vertices.push_back(to_glm(mesh.point(v)));
+    ImGui::Begin("Menu");
 
-        path_points.update(path_vertices);
+    ImGui::Checkbox("Draw wireframe", &flags.draw_wireframe);
+    ImGui::Checkbox("Show log console", &flags.show_log_console);
 
-        dijkstra_path_state = DijkstraPathState::DONE;
-      }
+    if (dijkstra_path_state == DijkstraPathState::IDLE)
+      if (ImGui::Button("Find shortest path"))
+        dijkstra_path_state = DijkstraPathState::SELECT_SOURCE;
 
-      // ImGui::NewFrame();
+    ImGui::End();
 
-      ImGui::Begin("Menu");
+    status_bar.draw();
 
-      ImGui::Checkbox("Draw wireframe", &flags.draw_wireframe);
-      ImGui::Checkbox("Show log console", &flags.show_log_console);
+    if (flags.show_log_console)
+      logger.draw();
 
-      if (dijkstra_path_state == DijkstraPathState::IDLE)
-        if (ImGui::Button("Find shortest path"))
-          dijkstra_path_state = DijkstraPathState::SELECT_SOURCE;
+    glEnable(GL_MULTISAMPLE);
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-      ImGui::End();
+    // draw the mesh
+    if (flags.draw_wireframe) {
+      basic_shader.use();
+      basic_shader.set_MVP(model, view, projection);
+      basic_shader.set_uniform("color", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+      gl_mesh.draw(MyGL::Mesh::DrawMode::WIREFRAME);
+    }
 
-      status_bar.draw();
+    phong_shader.use();
+    phong_shader.set_MVP(model, view, projection);
+    phong_shader.set_uniform("light_pos", glm::vec3(2.2f, 1.0f, 2.0f));
+    phong_shader.set_uniform("light_color", glm::vec3(1.0f, 1.0f, 1.0f));
+    phong_shader.set_uniform("view_pos", camera.get_position());
 
-      if (flags.show_log_console)
-        logger.draw();
+    phong_shader.set_uniform("color", glm::vec4(1.0f, 0.5f, 0.2f, 1.0f));
+    gl_mesh.draw();
 
-      glEnable(GL_MULTISAMPLE);
-      glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-      glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    pick_vertex.highlight_hovered_vertex(gl_mesh, {model, view, projection});
 
-      // draw the mesh
-      if (flags.draw_wireframe) {
-        basic_shader.use();
-        basic_shader.set_MVP(model, view, projection);
-        basic_shader.set_uniform("color", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-        gl_mesh.draw(MyGL::Mesh::DrawMode::WIREFRAME);
-      }
+    if (dijkstra_path_state == DijkstraPathState::DONE) {
+      round_point_shader.use();
+      round_point_shader.set_MVP(model, view, projection);
+      round_point_shader.set_uniform("color",
+                                     glm::vec4(0.2f, 0.8f, 0.3f, 1.0f));
+      path_points.draw();
+    }
 
-      phong_shader.use();
-      phong_shader.set_MVP(model, view, projection);
-      phong_shader.set_uniform("light_pos", glm::vec3(2.2f, 1.0f, 2.0f));
-      phong_shader.set_uniform("light_color", glm::vec3(1.0f, 1.0f, 1.0f));
-      phong_shader.set_uniform("view_pos", camera.get_position());
+    return std::nullopt;
+  };
 
-      phong_shader.set_uniform("color", glm::vec4(1.0f, 0.5f, 0.2f, 1.0f));
-      gl_mesh.draw();
-
-      pick_vertex.highlight_hovered_vertex(gl_mesh, {model, view, projection});
-
-      if (dijkstra_path_state == DijkstraPathState::DONE) {
-        round_point_shader.use();
-        round_point_shader.set_MVP(model, view, projection);
-        round_point_shader.set_uniform("color",
-                                       glm::vec4(0.2f, 0.8f, 0.3f, 1.0f));
-        path_points.draw();
-      }
-
-      return std::nullopt;
-    };
-
-    window.main_loop(render_loop);
-
-    // while (!window.should_close()) {
-    //   // Per-frame time logic
-    //   float current_frame_time = static_cast<float>(glfwGetTime());
-    //   delta_time = current_frame_time - last_frame_time;
-    //   last_frame_time = current_frame_time;
-
-    //   // Process input
-    //   // ==================================================
-    //   window.poll_events();
-    //   window.process_input();
-    //   window.process_camera_input(camera, delta_time);
-
-    //   // ImGUI
-    //   // ==================================================
-    //   ImGui_ImplOpenGL3_NewFrame();
-    //   ImGui_ImplGlfw_NewFrame();
-
-    //   // Render
-    //   // ==================================================
-
-    //   // render imgui and swap buffers
-    //   ImGui::Render();
-    //   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-    //   window.swap_buffers();
-    // }
-
-    return 0;
-  } catch (const std::exception &e) {
-    // std::cerr << e.what() << std::endl;
-    std::cout << e.what() << std::endl;
-  }
+  window.main_loop(render_loop);
 }
