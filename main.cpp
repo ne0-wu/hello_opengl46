@@ -114,15 +114,18 @@ int main() {
 
   // Shaders
   MyGL::ShaderProgram basic_shader(
-      MyGL::read_file_to_string("data/shaders/basic.vert"),
-      MyGL::read_file_to_string("data/shaders/basic.frag"));
+    { {GL_VERTEX_SHADER, MyGL::read_file_to_string("data/shaders/basic.vert")},
+      {GL_FRAGMENT_SHADER, MyGL::read_file_to_string("data/shaders/basic.frag")} }
+  );
   MyGL::ShaderProgram phong_shader(
-      MyGL::read_file_to_string("data/shaders/phong.vert"),
-      MyGL::read_file_to_string("data/shaders/phong.frag"));
-
+      { {GL_VERTEX_SHADER, MyGL::read_file_to_string("data/shaders/phong.vert")},
+        {GL_FRAGMENT_SHADER, MyGL::read_file_to_string("data/shaders/phong.frag")} }
+  );
   MyGL::ShaderProgram round_point_shader(
-      MyGL::read_file_to_string("data/shaders/basic.vert"),
-      MyGL::read_file_to_string("data/shaders/round_point.frag"));
+    { {GL_VERTEX_SHADER, MyGL::read_file_to_string("data/shaders/basic.vert")},
+      {GL_FRAGMENT_SHADER, MyGL::read_file_to_string("data/shaders/round_point.frag")} }
+  );
+
   MyGL::PickVertex pick_vertex;
 
   // Load mesh from file
@@ -273,13 +276,13 @@ int main() {
     // draw the mesh
     if (flags.draw_wireframe) {
       basic_shader.use();
-      basic_shader.set_MVP(model, view, projection);
+      basic_shader.set_MVP({model, view, projection});
       basic_shader.set_uniform("color", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
       gl_mesh.draw(MyGL::Mesh::DrawMode::WIREFRAME);
     }
 
     phong_shader.use();
-    phong_shader.set_MVP(model, view, projection);
+    phong_shader.set_MVP({model, view, projection});
     phong_shader.set_uniform("light_pos", glm::vec3(2.2f, 1.0f, 2.0f));
     phong_shader.set_uniform("light_color", glm::vec3(1.0f, 1.0f, 1.0f));
     phong_shader.set_uniform("view_pos", camera.get_position());
@@ -291,7 +294,7 @@ int main() {
 
     if (dijkstra_path_state == DijkstraPathState::DONE) {
       round_point_shader.use();
-      round_point_shader.set_MVP(model, view, projection);
+      round_point_shader.set_MVP({model, view, projection});
       round_point_shader.set_uniform("color",
                                      glm::vec4(0.2f, 0.8f, 0.3f, 1.0f));
       path_points.draw();
