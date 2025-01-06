@@ -5,10 +5,9 @@
 #include "Dijkstra.hh"
 #include "Mesh.hh"
 #include "MeshToGL.hh"
+#include "PickVertex.hh"
 
 #include "MyGL/LogConsole.hh"
-#include "MyGL/PickVertex.hh"
-#include "MyGL/Shader.hh"
 #include "MyGL/ShaderManager.hh"
 #include "MyGL/Utils.hh"
 #include "MyGL/Window.hh"
@@ -22,8 +21,6 @@ struct Flags {
   bool draw_wireframe = true;
   bool show_log_console = false;
 } flags;
-
-const char* InteractionModeItems[] = {"Default", "Select Vertex"};
 
 class StatusBar {
  public:
@@ -79,34 +76,6 @@ class GeodesicPath {
 
 // ==================================================
 
-// ImGUI IO for camera control
-void update_camera(MyGL::Camera& camera, float delta_time) {
-  auto io = ImGui::GetIO();
-  if (io.WantCaptureKeyboard)
-    return;
-  if (ImGui::IsKeyDown(ImGuiKey_W))
-    camera.on_keyboard(MyGL::Camera::KeyboardMoveDirection::FORWARD,
-                       delta_time);
-  if (ImGui::IsKeyDown(ImGuiKey_S))
-    camera.on_keyboard(MyGL::Camera::KeyboardMoveDirection::BACKWARD,
-                       delta_time);
-  if (ImGui::IsKeyDown(ImGuiKey_A))
-    camera.on_keyboard(MyGL::Camera::KeyboardMoveDirection::LEFT, delta_time);
-  if (ImGui::IsKeyDown(ImGuiKey_D))
-    camera.on_keyboard(MyGL::Camera::KeyboardMoveDirection::RIGHT, delta_time);
-  if (ImGui::IsKeyDown(ImGuiKey_K))
-    camera.on_keyboard(MyGL::Camera::KeyboardMoveDirection::UP, delta_time);
-  if (ImGui::IsKeyDown(ImGuiKey_J))
-    camera.on_keyboard(MyGL::Camera::KeyboardMoveDirection::DOWN, delta_time);
-
-  if (io.WantCaptureMouse)
-    return;
-
-  auto [x, y] = ImGui::GetMousePos();
-}
-
-// ==================================================
-
 int main() {
   // Initialize window (and OpenGL context)
   MyGL::Window window;
@@ -129,7 +98,7 @@ int main() {
        {GL_FRAGMENT_SHADER,
         MyGL::read_file_to_string("data/shaders/round_point.frag")}});
 
-  MyGL::PickVertex pick_vertex;
+  PickVertex pick_vertex;
 
   // Load mesh from file
   Mesh mesh;
@@ -166,8 +135,8 @@ int main() {
   MyGL::Mesh gl_mesh(mesh2gl.vertices(mesh), mesh2gl.indices(mesh));
 
   // Set up camera
-  // the camera looks at the origin and is positioned at (0, 0, -2) in the
-  // beginning
+  // the camera looks at the origin
+  // and is positioned at (0, 0, -2) in the beginning
   MyGL::OrbitCamera camera({0.0f, 0.0f, 0.0f});
   camera.set_position({0.0f, 0.0f, -2.0f});
 
@@ -188,14 +157,9 @@ int main() {
 
   // Render loop
   // ==================================================
-  float last_frame_time = static_cast<float>(glfwGetTime());
-
   auto render_loop = [&]() -> std::optional<int> {
-    float current_frame_time = static_cast<float>(glfwGetTime());
-    float delta_time = current_frame_time - last_frame_time;
-    last_frame_time = current_frame_time;
-
-    update_camera(camera, delta_time);
+    // process camera input
+    window.process_camera_input(camera);
 
     // write the model matrix of camera in the view matrix
     glm::mat4 view = camera.get_view_matrix() * camera.get_model_matrix();
@@ -209,7 +173,7 @@ int main() {
 
     // Select vertex
     // ==================================================
-    if (window.is_mouse_inside() && !ImGui::GetIO().WantCaptureMouse) {
+    if (!ImGui::GetIO().WantCaptureMouse) {
       ImVec2 mouse_pos = ImGui::GetMousePos();
       auto [width, height] = MyGL::get_viewport_size();
       pick_vertex.pick({mouse_pos.x, height - mouse_pos.y}, gl_mesh,

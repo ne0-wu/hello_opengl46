@@ -22,11 +22,13 @@ set(HEADERS
     Mesh.hh
     Dijkstra.hh
     MeshToGL.hh
+    PickVertex.hh
 )
 
 set(SOURCES
     main.cc
     Dijkstra.cc
+    PickVertex.cc
 )
 
 add_executable(${PROJECT_NAME}
