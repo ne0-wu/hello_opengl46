@@ -6,12 +6,14 @@ set(CMAKE_CXX_STANDARD 17)
 
 # OpenMesh
 set(OPENMESH_DOCS OFF)
+set(BUILD_APPS OFF)
 add_subdirectory(external/openmesh)
 add_compile_definitions(_USE_MATH_DEFINES)
 
 # Eigen
 set(EIGEN_BUILD_DOC OFF)
 set(BUILD_TESTING OFF)
+set(EIGEN_TEST_NOQT ON)
 add_subdirectory(external/eigen)
 
 # MyGL
